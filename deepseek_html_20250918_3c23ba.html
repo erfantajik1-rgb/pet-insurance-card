@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشخصات بیمه حیوان خانگی - بیمه سامان</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            background-color: #f0f8ff; /* رنگ پس‌زمینه آبی بسیار ملایم */
+            padding: 20px;
+            color: #2c5aa0; /* رنگ متن آبی تیره */
+            direction: rtl;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #2c5aa0, #1e88e5); /* گرادینت آبی */
+            color: white;
+            padding: 25px;
+            border-radius: 15px 15px 0 0;
+            margin-bottom: 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .card {
+            background: white;
+            border-radius: 0 0 15px 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            text-align: right;
+        }
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            margin-top: 8px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .info-item {
+            border-bottom: 1px dashed #e0e0e0;
+            padding: 12px 0;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #2c5aa0; /* رنگ آبی بیمه سامان */
+            font-size: 14px;
+        }
+        .info-value {
+            color: #555;
+            font-size: 15px;
+        }
+        .loading {
+            color: #666;
+            font-size: 18px;
+            padding: 40px;
+        }
+        .error {
+            color: #e53935;
+            background: #ffebee;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }
+        @media (max-width: 600px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                padding: 20px 15px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>بیمه سامان</h1>
+            <div class="subtitle">سامانه استعلام بیمه حیوانات خانگی</div>
+        </div>
+        
+        <div class="card">
+            <div id="pet-info">
+                <div class="loading">در حال دریافت اطلاعات از سامانه بیمه سامان...</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            اطلاعات نمایش داده شده متعلق به بیمه سامان می‌باشد.
+        </div>
+    </div>
+
+    <script>
+        function fetchPetData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const petId = urlParams.get('id');
+
+            if (!petId) {
+                document.getElementById('pet-info').innerHTML = `
+                    <div class="error">
+                        خطا: شناسه بیمه‌نامه مشخص نشده است.<br>
+                        لطفاً از طریق QR Code صحیح وارد شوید.
+                    </div>
+                `;
+                return;
+            }
+
+            // ID شیت شما
+            const SPREADSHEET_ID = '1blulxfHDxS9rjHdkRc_xdKYUM0ejzqRsPlWZWAhL7r8';
+            const SHEET_NAME = 'Sheet1';
+            const apiUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${SHEET_NAME}`;
+
+            fetch(apiUrl)
+                .then(response => response.text())
+                .then(data => {
+                    try {
+                        const jsonData = JSON.parse(data.substring(47).slice(0, -2));
+                        const rows = jsonData.table.rows;
+                        
+                        let found = false;
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i].c;
+                            // فرض می‌کنیم "کد چیپست" ستون یازدهم (ایندکس 10) است و به عنوان شناسه استفاده می‌شود
+                            const chipCode = row[10]?.v?.toString().trim(); // کد چیپست
+                            
+                            if (chipCode === petId) {
+                                displayPetInfo(row);
+                                found = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!found) {
+                            document.getElementById('pet-info').innerHTML = `
+                                <div class="error">
+                                    اطلاعاتی برای کد چیپست "${petId}" یافت نشد.<br>
+                                    لطفاً با پشتیبانی بیمه سامان تماس بگیرید.
+                                </div>
+                            `;
+                        }
+                    } catch (error) {
+                        console.error('Error parsing data:', error);
+                        showError('خطا در پردازش اطلاعات دریافتی');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    showError('خطا در ارتباط با سرور. لطفاً اینترنت خود را بررسی کنید.');
+                });
+        }
+
+        function displayPetInfo(row) {
+            // ایندکس ستون‌ها بر اساس ترتیب شما:
+            // [0]تاریخ ثبت, [1]نام و نام خانوادگی, [2]کد ملی, [3]شماره تماس, 
+            // [4]نام حیوان, [5]جنسیت, [6]نوع, [7]نژاد, [8]تاریخ تولد, 
+            // [9]تاریخ واکسناسیون, [10]کد چیپست, [11]طرح, [12]توضیحات
+            
+            const html = `
+                <div style="margin-bottom: 25px;">
+                    <h2 style="color: #2c5aa0; margin-bottom: 20px;">مشخصات بیمه شده</h2>
+                </div>
+                
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">کد چیپست:</div>
+                        <div class="info-value">${row[10]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">نام حیوان:</div>
+                        <div class="info-value">${row[4]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">نوع:</div>
+                        <div class="info-value">${row[6]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">نژاد:</div>
+                        <div class="info-value">${row[7]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">جنسیت:</div>
+                        <div class="info-value">${row[5]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">تاریخ تولد:</div>
+                        <div class="info-value">${formatDate(row[8]?.v) || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">تاریخ واکسناسیون:</div>
+                        <div class="info-value">${formatDate(row[9]?.v) || '---'}</div>
+                    </div>
+                </div>
+
+                <div style="margin: 30px 0; border-top: 2px solid #2c5aa0; padding-top: 20px;">
+                    <h3 style="color: #2c5aa0;">مشخصات مالک</h3>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">نام مالک:</div>
+                        <div class="info-value">${row[1]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">کد ملی:</div>
+                        <div class="info-value">${row[2]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">شماره تماس:</div>
+                        <div class="info-value">${row[3]?.v || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">تاریخ ثبت:</div>
+                        <div class="info-value">${formatDate(row[0]?.v) || '---'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">طرح بیمه:</div>
+                        <div class="info-value">${row[11]?.v || '---'}</div>
+                    </div>
+                </div>
+
+                ${row[12]?.v ? `
+                <div style="margin: 30px 0; border-top: 2px solid #2c5aa0; padding-top: 20px;">
+                    <h3 style="color: #2c5aa0;">توضیحات اضافی</h3>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        ${row[12]?.v}
+                    </div>
+                </div>
+                ` : ''}
+            `;
+
+            document.getElementById('pet-info').innerHTML = html;
+        }
+
+        function formatDate(dateValue) {
+            if (!dateValue) return null;
+            // تبدیل فرمت تاریخ به فرمت فارسی
+            if (typeof dateValue === 'string') return dateValue;
+            if (typeof dateValue === 'object') {
+                return dateValue.toLocaleDateString('fa-IR');
+            }
+            return dateValue;
+        }
+
+        function showError(message) {
+            document.getElementById('pet-info').innerHTML = `
+                <div class="error">
+                    ${message}<br>
+                    لطفاً مجدداً تلاش کنید یا با پشتیبانی تماس بگیرید.
+                </div>
+            `;
+        }
+
+        // اجرای اسکریپت پس از لود شدن صفحه
+        window.addEventListener('load', fetchPetData);
+    </script>
+</body>
+</html>
